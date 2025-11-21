@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Excluir código generado por OpenAPI Generator -->
+    <Match>
+        <Package name="~com\.jsca\.infrastructure\.adapter\.in\.rest\.(api|model).*"/>
+    </Match>
+
+    <!-- Excluir código generado en target -->
+    <Match>
+        <Source name="~.*/target/generated-sources/.*"/>
+    </Match>
+</FindBugsFilter>
