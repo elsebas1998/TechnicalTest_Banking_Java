@@ -1,0 +1,13 @@
+# Ignorar archivos innecesarios para Docker build
+target/
+!target/*.jar
+.git/
+.gitignore
+.idea/
+.vscode/
+*.iml
+*.log
+.DS_Store
+README.md
+ai/
+postman_collection.json
