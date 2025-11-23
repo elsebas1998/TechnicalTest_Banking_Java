@@ -6,7 +6,10 @@ WORKDIR /app
 
 # Copiar archivos de configuración de Maven
 COPY pom.xml .
+COPY checkstyle.xml .
+COPY spotbugs-exclude.xml .
 COPY src ./src
+
 
 # Compilar la aplicación
 RUN mvn clean package -DskipTests
