@@ -1,0 +1,499 @@
+openapi: 3.0.3
+info:
+  title: Payment Initiation API
+  version: 1.0.0
+  description: |
+    API REST para iniciación de órdenes de pago basada en servicio SOAP legacy.
+    Implementa mapeo de operaciones bancarias a estándar BIAN Payment Initiation
+    con estados ISO 20022 para trazabilidad completa del ciclo de vida del pago.
+  contact:
+    name: API Support
+    email: api-support@bank.example.com
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8080
+    description: Servidor de desarrollo local
+
+paths:
+  /payment-initiation/payment-orders:
+    post:
+      summary: Crear nueva orden de pago
+      description: |
+        Inicia una nueva orden de pago capturando datos del deudor, acreedor y detalles
+        de la transacción. Realiza validaciones técnicas y retorna identificador único.
+      operationId: submitPaymentOrder
+      tags:
+        - Payment Orders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentOrderRequest'
+            examples:
+              domestic_payment:
+                summary: Pago doméstico SEPA
+                value:
+                  externalId: "CLI-2024-001-ABC123"
+                  debtorIban: "ES9121000418450200051332"
+                  creditorIban: "ES7921000813610123456789"
+                  amount: 1500.50
+                  currency: "EUR"
+                  remittanceInfo: "Factura #2024-045 - Servicios de consultoría"
+                  requestedExecutionDate: "2025-11-25"
+              international_payment:
+                summary: Pago internacional
+                value:
+                  externalId: "INT-2024-XYZ789"
+                  debtorIban: "DE89370400440532013000"
+                  creditorIban: "FR1420041010050500013M02606"
+                  amount: 5000.00
+                  currency: "EUR"
+                  remittanceInfo: "International wire transfer"
+                  requestedExecutionDate: "2025-11-22"
+      responses:
+        '201':
+          description: Orden de pago creada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOrderResponse'
+              examples:
+                success_response:
+                  value:
+                    paymentOrderId: "PO-2024-11-20-00012345"
+                    status: "INITIATED"
+                    createdAt: "2025-11-20T18:49:35.123Z"
+        '400':
+          description: Solicitud inválida - errores de validación
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_iban:
+                  value:
+                    type: "https://api.bank.example.com/problems/validation-error"
+                    title: "Validation Failed"
+                    status: 400
+                    detail: "El IBAN del deudor no cumple con el formato válido"
+                    instance: "/payment-initiation/payment-orders"
+                insufficient_funds:
+                  value:
+                    type: "https://api.bank.example.com/problems/insufficient-funds"
+                    title: "Insufficient Funds"
+                    status: 400
+                    detail: "La cuenta deudora no tiene fondos suficientes para completar la transacción"
+                    instance: "/payment-initiation/payment-orders"
+        '500':
+          description: Error interno del servidor
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                server_error:
+                  value:
+                    type: "https://api.bank.example.com/problems/internal-error"
+                    title: "Internal Server Error"
+                    status: 500
+                    detail: "Error al comunicarse con el sistema bancario legacy"
+                    instance: "/payment-initiation/payment-orders"
+
+  /payment-initiation/payment-orders/{paymentOrderId}:
+    get:
+      summary: Obtener detalles completos de orden de pago
+      description: |
+        Recupera todos los detalles de una orden de pago específica incluyendo
+        datos originales de la solicitud, estado actual y metadatos del sistema.
+      operationId: getPaymentOrder
+      tags:
+        - Payment Orders
+      parameters:
+        - name: paymentOrderId
+          in: path
+          required: true
+          description: Identificador único de la orden de pago
+          schema:
+            type: string
+            example: "PO-2024-11-20-00012345"
+      responses:
+        '200':
+          description: Detalles completos de la orden de pago
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOrderDetailsResponse'
+              examples:
+                complete_order:
+                  value:
+                    paymentOrderId: "PO-2024-11-20-00012345"
+                    externalId: "CLI-2024-001-ABC123"
+                    debtorIban: "ES9121000418450200051332"
+                    creditorIban: "ES7921000813610123456789"
+                    amount: 1500.50
+                    currency: "EUR"
+                    remittanceInfo: "Factura #2024-045 - Servicios de consultoría"
+                    requestedExecutionDate: "2025-11-25"
+                    status: "PENDING"
+                    createdAt: "2025-11-20T18:49:35.123Z"
+                    lastUpdate: "2025-11-20T18:50:12.456Z"
+        '404':
+          description: Orden de pago no encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                not_found:
+                  value:
+                    type: "https://api.bank.example.com/problems/resource-not-found"
+                    title: "Payment Order Not Found"
+                    status: 404
+                    detail: "No se encontró ninguna orden de pago con el ID especificado"
+                    instance: "/payment-initiation/payment-orders/PO-INVALID-ID"
+        '500':
+          description: Error interno del servidor
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /payment-initiation/payment-orders/{paymentOrderId}/status:
+    get:
+      summary: Consultar estado de orden de pago
+      description: |
+        Obtiene únicamente el estado actual y timestamp de última actualización
+        de una orden de pago. Operación ligera para monitoreo frecuente.
+      operationId: getPaymentOrderStatus
+      tags:
+        - Payment Orders
+      parameters:
+        - name: paymentOrderId
+          in: path
+          required: true
+          description: Identificador único de la orden de pago
+          schema:
+            type: string
+            example: "PO-2024-11-20-00012345"
+      responses:
+        '200':
+          description: Estado actual de la orden de pago
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOrderStatusResponse'
+              examples:
+                status_received:
+                  value:
+                    status: "INITIATED"
+                    lastUpdate: "2025-11-20T18:49:35.123Z"
+                status_completed:
+                  value:
+                    status: "EXECUTED"
+                    lastUpdate: "2025-11-20T19:15:42.789Z"
+                status_rejected:
+                  value:
+                    status: "REJECTED"
+                    lastUpdate: "2025-11-20T18:50:05.321Z"
+        '404':
+          description: Orden de pago no encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                not_found:
+                  value:
+                    type: "https://api.bank.example.com/problems/resource-not-found"
+                    title: "Payment Order Not Found"
+                    status: 404
+                    detail: "No se encontró ninguna orden de pago con el ID especificado"
+                    instance: "/payment-initiation/payment-orders/PO-INVALID-ID/status"
+        '500':
+          description: Error interno del servidor
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    PaymentOrderRequest:
+      type: object
+      description: Solicitud para crear una nueva orden de pago
+      required:
+        - externalId
+        - debtorIban
+        - creditorIban
+        - amount
+        - currency
+        - requestedExecutionDate
+      properties:
+        externalId:
+          type: string
+          description: |
+            Identificador externo único proporcionado por el cliente para trazabilidad
+            e idempotencia. Permite al cliente rastrear la orden en sus sistemas.
+          minLength: 5
+          maxLength: 50
+          example: "CLI-2024-001-ABC123"
+        debtorIban:
+          type: string
+          description: |
+            IBAN de la cuenta del ordenante (deudor) desde donde se debita el monto.
+            Debe cumplir con formato ISO 13616.
+          pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$'
+          example: "ES9121000418450200051332"
+        creditorIban:
+          type: string
+          description: |
+            IBAN de la cuenta del beneficiario (acreedor) a quien se acredita el pago.
+            Debe cumplir con formato ISO 13616.
+          pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$'
+          example: "ES7921000813610123456789"
+        amount:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: |
+            Monto de la transacción con precisión decimal como string para evitar
+            pérdida de precisión. Formato: dígitos con hasta 2 decimales.
+            Se mapeará a BigDecimal en Java.
+          example: "1500.50"
+
+
+        currency:
+          type: string
+          description: |
+            Código de moneda según ISO 4217 (3 letras mayúsculas).
+            Ejemplos: EUR, USD, GBP, JPY.
+          pattern: '^[A-Z]{3}$'
+          minLength: 3
+          maxLength: 3
+          example: "EUR"
+        remittanceInfo:
+          type: string
+          description: |
+            Información de remesa o concepto del pago. Campo opcional que proporciona
+            contexto adicional sobre el propósito del pago.
+          maxLength: 140
+          example: "Factura #2024-045 - Servicios de consultoría"
+        requestedExecutionDate:
+          type: string
+          format: date
+          description: |
+            Fecha solicitada para la ejecución del pago en formato ISO 8601 (YYYY-MM-DD).
+            Debe ser igual o posterior a la fecha actual.
+          example: "2025-11-25"
+      example:
+        externalId: "CLI-2024-001-ABC123"
+        debtorIban: "ES9121000418450200051332"
+        creditorIban: "ES7921000813610123456789"
+        amount: 1500.50
+        currency: "EUR"
+        remittanceInfo: "Factura #2024-045 - Servicios de consultoría"
+        requestedExecutionDate: "2025-11-25"
+
+    PaymentOrderResponse:
+      type: object
+      description: Respuesta tras la creación exitosa de una orden de pago
+      required:
+        - paymentOrderId
+        - status
+        - createdAt
+      properties:
+        paymentOrderId:
+          type: string
+          description: |
+            Identificador único asignado por el sistema bancario a la orden de pago.
+            Utilizar este ID para consultas posteriores.
+          example: "PO-2024-11-20-00012345"
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        createdAt:
+          type: string
+          format: date-time
+          description: |
+            Timestamp de creación de la orden en formato ISO 8601 con zona horaria UTC.
+          example: "2025-11-20T18:49:35.123Z"
+      example:
+        paymentOrderId: "PO-2024-11-20-00012345"
+        status: "INITIATED"
+        createdAt: "2025-11-20T18:49:35.123Z"
+
+    PaymentOrderDetailsResponse:
+      type: object
+      description: |
+        Detalles completos de una orden de pago incluyendo datos originales
+        de la solicitud, estado actual y metadatos del sistema.
+      required:
+        - paymentOrderId
+        - externalId
+        - debtorIban
+        - creditorIban
+        - amount
+        - currency
+        - requestedExecutionDate
+        - status
+        - createdAt
+        - lastUpdate
+      properties:
+        paymentOrderId:
+          type: string
+          description: Identificador único de la orden de pago
+          example: "PO-2024-11-20-00012345"
+        externalId:
+          type: string
+          description: Identificador externo del cliente
+          example: "CLI-2024-001-ABC123"
+        debtorIban:
+          type: string
+          description: IBAN de la cuenta deudora
+          pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$'
+          example: "ES9121000418450200051332"
+        creditorIban:
+          type: string
+          description: IBAN de la cuenta acreedora
+          pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}$'
+          example: "ES7921000813610123456789"
+        amount:
+          type: number
+          format: double
+          description: Monto de la transacción
+          example: 1500.50
+        currency:
+          type: string
+          description: Código de moneda ISO 4217
+          pattern: '^[A-Z]{3}$'
+          example: "EUR"
+        remittanceInfo:
+          type: string
+          description: Información de remesa (opcional)
+          example: "Factura #2024-045 - Servicios de consultoría"
+        requestedExecutionDate:
+          type: string
+          format: date
+          description: Fecha solicitada de ejecución
+          example: "2025-11-25"
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp de creación
+          example: "2025-11-20T18:49:35.123Z"
+        lastUpdate:
+          type: string
+          format: date-time
+          description: Timestamp de última actualización del estado
+          example: "2025-11-20T18:50:12.456Z"
+      example:
+        paymentOrderId: "PO-2024-11-20-00012345"
+        externalId: "CLI-2024-001-ABC123"
+        debtorIban: "ES9121000418450200051332"
+        creditorIban: "ES7921000813610123456789"
+        amount: 1500.50
+        currency: "EUR"
+        remittanceInfo: "Factura #2024-045 - Servicios de consultoría"
+        requestedExecutionDate: "2025-11-25"
+        status: "PENDING"
+        createdAt: "2025-11-20T18:49:35.123Z"
+        lastUpdate: "2025-11-20T18:50:12.456Z"
+
+    PaymentOrderStatusResponse:
+      type: object
+      description: Estado actual de una orden de pago con timestamp de actualización
+      required:
+        - status
+        - lastUpdate
+      properties:
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        lastUpdate:
+          type: string
+          format: date-time
+          description: |
+            Timestamp de la última actualización del estado en formato ISO 8601 UTC.
+          example: "2025-11-20T18:50:12.456Z"
+      example:
+        status: "EXECUTED"
+        lastUpdate: "2025-11-20T18:50:12.456Z"
+
+    PaymentStatus:
+      type: string
+      description: |
+        Estados simplificados de orden de pago para MVP.
+        Basados en ISO 20022 pero reducidos para este ejercicio técnico.
+      enum:
+        - INITIATED   # Orden recibida y aceptada inicialmente (equivale a RCVD)
+        - PENDING     # En proceso de validación y verificación (equivale a ACCP/ACFC)
+        - EXECUTED    # Pago completado exitosamente (equivale a ACSC/ACCC)
+        - REJECTED    # Orden rechazada por validaciones o fondos
+        - CANCELLED   # Orden cancelada por el usuario
+        - FAILED      # Error técnico durante el procesamiento
+      example: "PENDING"
+
+    ErrorResponse:
+      type: object
+      description: |
+        Estructura de error según RFC 7807 (Problem Details for HTTP APIs).
+        Proporciona información estructurada y consistente sobre errores de la API.
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: |
+            URI que identifica el tipo de problema. Desreferenciable a documentación
+            legible por humanos del tipo de error específico.
+          maxLength: 128
+          example: "https://api.bank.example.com/problems/validation-error"
+        title:
+          type: string
+          description: |
+            Resumen breve y legible del tipo de problema. No debe cambiar entre
+            ocurrencias del mismo tipo de problema, excepto para localización.
+          maxLength: 120
+          example: "Validation Failed"
+        status:
+          type: integer
+          format: int32
+          description: |
+            Código de estado HTTP generado por el servidor de origen para esta
+            ocurrencia del problema. Debe coincidir con el código de respuesta HTTP.
+          minimum: 100
+          maximum: 599
+          example: 400
+        detail:
+          type: string
+          description: |
+            Explicación legible y específica de esta ocurrencia del problema.
+            Puede variar entre diferentes instancias del mismo tipo de error.
+          maxLength: 2048
+          example: "El IBAN del deudor no cumple con el formato válido ISO 13616"
+        instance:
+          type: string
+          format: uri-reference
+          description: |
+            URI que identifica la ocurrencia específica del problema. Puede
+            referenciar el endpoint o recurso donde ocurrió el error.
+          maxLength: 128
+          example: "/payment-initiation/payment-orders"
+      example:
+        type: "https://api.bank.example.com/problems/validation-error"
+        title: "Validation Failed"
+        status: 400
+        detail: "El IBAN del deudor no cumple con el formato válido ISO 13616"
+        instance: "/payment-initiation/payment-orders"
+
+tags:
+  - name: Payment Orders
+    description: |
+      Operaciones para gestionar el ciclo de vida completo de órdenes de pago,
+      desde la iniciación hasta la consulta de estado y detalles.
