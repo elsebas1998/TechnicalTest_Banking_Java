@@ -85,6 +85,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -176,6 +181,7 @@
                         <exclude>**/jsca/JscaApplication.class</exclude>
                         <!-- Excluir configuraciones -->
                         <exclude>**/infrastructure/config/**</exclude>
+                        <exclude>**/infrastructure/adapter/in/rest/GlobalExceptionHandler.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>
